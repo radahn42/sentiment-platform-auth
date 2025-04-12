@@ -11,6 +11,7 @@ import { RedisModule } from '@nestjs-modules/ioredis';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
     RedisModule.forRootAsync({
       imports: [ConfigModule],

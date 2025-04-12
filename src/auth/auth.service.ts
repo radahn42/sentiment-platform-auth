@@ -46,6 +46,7 @@ export class AuthService {
     this.kafkaClient.emit('user.logged_in', {
       email: user.email,
       timestamp: new Date(),
+      token,
     });
 
     return { accessToken: token };
