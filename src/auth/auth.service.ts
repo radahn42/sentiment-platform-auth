@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { User } from './user.schema';
+import { User } from './user/user.schema';
 import { Model } from 'mongoose';
 import { ClientKafka } from '@nestjs/microservices';
 import { JwtService } from '@nestjs/jwt';
@@ -36,6 +36,14 @@ export class AuthService {
     const user = await this.userModel.findOne({ email }).exec();
     if (!user || !(await verify(user.password, password))) {
       throw new Error('User not found');
+    }
+
+    const existingToken = await this.redisClient.get(
+      `session:${String(user._id)}`,
+    );
+
+    if (existingToken) {
+      return { accessToken: existingToken };
     }
 
     const payload = { email: user.email, sub: user._id };
