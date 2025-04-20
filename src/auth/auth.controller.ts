@@ -1,36 +1,19 @@
-import { Body, Controller, Post, Res } from '@nestjs/common';
+import { Controller } from '@nestjs/common';
+import { MessagePattern, Payload } from '@nestjs/microservices';
+import { KafkaTopic, LoginRequest, RegisterRequest } from '@app/kafka';
 import { AuthService } from './auth.service';
-import { LoginDto, RegisterDto } from './dto';
-import { Response } from 'express';
-import { ConfigService } from '@nestjs/config';
 
-@Controller('auth')
+@Controller()
 export class AuthController {
-  constructor(
-    private authService: AuthService,
-    private configService: ConfigService,
-  ) {}
+  constructor(private readonly authService: AuthService) {}
 
-  @Post('register')
-  async register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto.email, dto.password);
+  @MessagePattern(KafkaTopic.LoginUser)
+  login(@Payload() payload: LoginRequest) {
+    return this.authService.login(payload);
   }
 
-  @Post('login')
-  async login(
-    @Body() dto: LoginDto,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const { accessToken } = await this.authService.login(
-      dto.email,
-      dto.password,
-    );
-    res.cookie('accessToken', accessToken, {
-      httpOnly: true,
-      secure: this.configService.get('NODE_ENV') === 'production',
-      sameSite: 'strict',
-      maxAge: 3600 * 3600,
-    });
-    return { message: 'Login successful' };
+  @MessagePattern(KafkaTopic.RegisterUser)
+  register(@Payload() payload: RegisterRequest) {
+    return this.authService.register(payload);
   }
 }

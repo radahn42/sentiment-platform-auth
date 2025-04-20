@@ -3,23 +3,18 @@ import { AppModule } from './app.module';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-
-  app.connectMicroservice<MicroserviceOptions>({
-    transport: Transport.KAFKA,
-    options: {
-      client: {
-        brokers: ['kafka:9092'],
-      },
-      consumer: {
-        groupId: 'auth-consumer',
+  const app = await NestFactory.createMicroservice<MicroserviceOptions>(
+    AppModule,
+    {
+      transport: Transport.KAFKA,
+      options: {
+        client: {
+          clientId: 'auth',
+          brokers: ['kafka:9092'],
+        },
       },
     },
-  });
-
-  await app.startAllMicroservices();
-  await app.listen(3000, () =>
-    console.log(`Auth service is running on port 3000`),
   );
+  app.listen();
 }
 bootstrap();

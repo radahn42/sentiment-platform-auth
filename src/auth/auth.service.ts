@@ -1,73 +1,63 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { User } from './user/user.schema';
-import { Model } from 'mongoose';
-import { ClientKafka } from '@nestjs/microservices';
-import { JwtService } from '@nestjs/jwt';
-import { InjectRedis } from '@nestjs-modules/ioredis';
-import { hash, verify } from 'argon2';
-import Redis from 'ioredis';
+import { Injectable, Logger } from '@nestjs/common';
+import { UserService } from '../user/user.service';
+import {
+  LoginRequest,
+  LoginResponse,
+  RegisterRequest,
+  RegisterResponse,
+} from '@app/kafka';
+import { verify } from 'argon2';
 
 @Injectable()
 export class AuthService {
-  constructor(
-    @InjectModel(User.name) private userModel: Model<User>,
-    private jwtService: JwtService,
-    @Inject('KAFKA_SERVICE') private kafkaClient: ClientKafka,
-    @InjectRedis() private redisClient: Redis,
-  ) {}
+  private readonly logger = new Logger(AuthService.name);
 
-  async register(email: string, password: string) {
-    const hashedPassword = await hash(password);
-    const user = await this.userModel.create({
-      email,
-      password: hashedPassword,
-    });
+  constructor(private readonly userService: UserService) {}
 
-    this.kafkaClient.emit('user.registered', {
-      email: user.email,
-      timestamp: new Date(),
-    });
+  async login(payload: LoginRequest): Promise<LoginResponse> {
+    this.logger.log(`Login request ${payload.requestId} received`);
+    const { username, password } = payload.data;
 
-    return { message: 'User registered successfully' };
-  }
-
-  async login(email: string, password: string) {
-    const user = await this.userModel.findOne({ email }).exec();
+    const user = await this.userService.findUserByUsername(username);
     if (!user || !(await verify(user.password, password))) {
-      throw new Error('User not found');
+      return {
+        success: false,
+        message: "user doesn't exist",
+      };
     }
 
-    const existingToken = await this.redisClient.get(
-      `session:${String(user._id)}`,
-    );
-
-    if (existingToken) {
-      return { accessToken: existingToken };
-    }
-
-    const payload = { email: user.email, sub: user._id };
-    const token = await this.jwtService.signAsync(payload);
-
-    await this.redisClient.setex(`session:${String(user._id)}`, 3600, token);
-
-    this.kafkaClient.emit('user.logged_in', {
-      email: user.email,
-      timestamp: new Date(),
-      token,
-    });
-
-    return { accessToken: token };
+    return {
+      success: true,
+      data: {
+        accessToken: 'mock-access-token',
+        refreshToken: 'mock-refresh-token',
+        userId: user.id,
+        username: user.username,
+      },
+    };
   }
 
-  async validateUser(payload: {
-    email: string;
-    sub: string;
-  }): Promise<{ id: string; email: string } | null> {
-    const user = await this.userModel.findById(payload.sub).exec();
-    if (!user || user.email !== payload.email) {
-      return null;
+  async register(payload: RegisterRequest): Promise<RegisterResponse> {
+    this.logger.log(`Register request ${payload.requestId} received`);
+    const { username, password, email } = payload.data;
+
+    let user = await this.userService.findUserByUsername(username);
+    if (user) {
+      return {
+        success: false,
+        message: 'user already exists',
+      };
     }
-    return { id: String(user._id), email: user.email };
+
+    user = await this.userService.createUser(username, password, email);
+
+    return {
+      success: true,
+      data: {
+        userId: user.id,
+        username: user.username,
+        email: user.email,
+      },
+    };
   }
 }
